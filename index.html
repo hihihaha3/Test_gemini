@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hệ Thống AR - Đinh Quang Trung</title>
+    <title>Hệ Thống AR Số Hóa - Đinh Quang Trung</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -13,73 +13,286 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
-        
-        /* Video camera làm nền */
         .camera-bg {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover; transform: scaleX(-1); /* Gương */
-            z-index: 0; opacity: 0.6; /* Làm tối camera để hạt nổi hơn */
+            object-fit: cover; transform: scaleX(-1); z-index: 0; opacity: 0.5; filter: grayscale(30%);
         }
-        
-        /* Video input ẩn cho AI xử lý */
         #input_video { display: none; }
-
         .glass-panel {
-            background: rgba(10, 10, 10, 0.6);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
+            background: rgba(10, 10, 10, 0.7); backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;
         }
-
-        /* Màn hình chờ & Nút bấm */
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 9999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #00ffff; text-align: center;
+            background: #000; z-index: 9999; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: #00ffff;
         }
         .start-btn {
-            margin-top: 20px; padding: 15px 40px;
-            background: transparent; border: 2px solid #00ffff; color: #00ffff;
-            font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer;
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+            margin-top: 20px; padding: 15px 40px; background: rgba(0, 255, 255, 0.1);
+            border: 2px solid #00ffff; color: #00ffff; font-weight: bold; border-radius: 50px;
             transition: 0.3s;
         }
         .start-btn:hover { background: #00ffff; color: #000; box-shadow: 0 0 30px #00ffff; }
-        .error-msg { color: #ff3333; margin-top: 10px; font-size: 0.9rem; max-width: 80%; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1 class="text-3xl font-bold mb-2 tracking-widest">SYSTEM INITIALIZING</h1>
+        <h1 class="text-3xl font-bold mb-2 tracking-widest">DIGITAL AR SYSTEM</h1>
         <p class="text-gray-400 text-sm mb-8">User: Đinh Quang Trung</p>
-        
-        <button id="btn-start" class="start-btn" onclick="startSystem()">
-            KÍCH HOẠT CAMERA
+        <button id="btn-start" class="start-btn animate-bounce" onclick="startSystem()">
+            KÍCH HOẠT HỆ THỐNG
         </button>
-        
-        <div id="status-msg" class="mt-4 text-gray-500 text-xs animate-pulse">Waiting for user input...</div>
-        <div id="error-log" class="error-msg hidden"></div>
+        <div id="error-log" class="text-red-500 mt-4 hidden text-sm"></div>
     </div>
 
     <video id="camera_display" class="camera-bg" autoplay playsinline muted></video>
     <video id="input_video" autoplay playsinline muted></video>
-
     <div id="canvas-container"></div>
 
-    <div class="absolute top-4 right-4 w-64 glass-panel p-4 text-white z-50 hidden" id="ui-panel">
-        <h2 class="text-lg font-bold text-cyan-400 mb-2">HAND CONTROLLER</h2>
-        
-        <div class="space-y-2">
-            <button onclick="changeShape('heart')" class="w-full bg-pink-900/40 hover:bg-pink-600 border border-pink-500/30 py-1 rounded text-sm">❤️ Trái Tim</button>
-            <button onclick="changeShape('planet')" class="w-full bg-blue-900/40 hover:bg-blue-600 border border-blue-500/30 py-1 rounded text-sm">🪐 Hành Tinh</button>
-            <button onclick="changeShape('lotus')" class="w-full bg-green-900/40 hover:bg-green-600 border border-green-500/30 py-1 rounded text-sm">🌿 Hoa Sen</button>
+    <div class="absolute top-4 left-4 glass-panel p-4 text-white z-50 hidden" id="ui-panel">
+        <h2 class="text-xs font-bold text-gray-400 uppercase mb-1">Trạng thái cử chỉ</h2>
+        <div class="flex items-center space-x-3">
+            <span class="text-3xl">🖐️</span>
+            <div>
+                <p class="text-xl font-bold text-cyan-400" id="gesture-result">Đang chờ...</p>
+                <p class="text-xs text-gray-300" id="hand-count-status">Chưa phát hiện tay</p>
+            </div>
         </div>
+    </div>
 
-        <div class="mt-4 p-2 bg-black/40 rounded text-xs">
-            <p>Trạng thái: <span id="hand-status" class="text-red-400 font-bold">Tìm tay...</span></p>
-            <p>Khoảng cách: <span id="dist-val" class="text-cyan-400">--</span></p>
+    <div class="absolute bottom-10 w-full text-center z-40 hidden" id="guide-text">
+        <span class="bg-black/60 text-white/90 px-6 py-3 rounded-full text-lg backdrop-blur-md border border-cyan-500/30 font-semibold">
+            Giơ các ngón tay (0-5) để tạo số
+        </span>
+    </div>
+
+    <script>
+        // --- CẤU HÌNH ---
+        const PARTICLE_COUNT = 7000;
+        let currentShape = 'heart'; // Hình dạng mặc định ban đầu
+        let lastDetectedNumber = -1;
+        
+        // --- THREE.JS SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.z = 22;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // Texture hạt (tạo đốm sáng)
+        const canvas = document.createElement('canvas');
+        canvas.width = 64; canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(32,32,0,32,32,32);
+        grad.addColorStop(0, 'rgba(255,255,255,1)');
+        grad.addColorStop(0.4, 'rgba(0,255,255,0.8)');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad; ctx.fillRect(0,0,64,64);
+        const texture = new THREE.Texture(canvas); texture.needsUpdate = true;
+
+        const geometry = new THREE.BufferGeometry();
+        const pos = new Float32Array(PARTICLE_COUNT * 3);
+        const targetPos = new Float32Array(PARTICLE_COUNT * 3);
+        
+        for(let i=0; i<PARTICLE_COUNT*3; i++) {
+            pos[i] = (Math.random()-0.5)*100; // Vị trí ban đầu bay lung tung
+            targetPos[i] = pos[i];
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const material = new THREE.PointsMaterial({ size: 0.3, map: texture, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // --- HÀM TẠO HÌNH DÁNG (Cốt lõi mới) ---
+        function calcTargets(shape) {
+            const scale = 0.8;
+            for(let i=0; i<PARTICLE_COUNT; i++) {
+                let x=0, y=0, z=0; const idx=i*3;
+                const t = Math.random(); // Biến ngẫu nhiên để rải hạt dọc theo nét
+                const section = i / PARTICLE_COUNT; // Biến để chia hạt vào các nét khác nhau
+
+                if(shape === 'heart') {
+                    const a = Math.random()*Math.PI*2, r=Math.random();
+                    x = 16*Math.pow(Math.sin(a),3)*scale*r; y=(13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a))*scale*r; z=(Math.random()-0.5)*5;
+                } 
+                // --- CÁC CON SỐ TỪ 0 ĐẾN 5 ---
+                else if(shape === 'num0') { // Số 0: Hình elip đứng
+                    const a = Math.random() * Math.PI * 2;
+                    x = 6 * Math.cos(a); y = 8 * Math.sin(a); z = (Math.random()-0.5)*2;
+                }
+                else if(shape === 'num1') { // Số 1: Đường thẳng đứng
+                    x = 0 + (Math.random()-0.5); y = (t - 0.5) * 16; z = (Math.random()-0.5)*2;
+                }
+                else if(shape === 'num2') { // Số 2: 3 nét (Cong trên, Chéo xuống, Ngang đáy)
+                    if(section < 0.4) { // Nét cong trên
+                        const a = Math.PI - (t * Math.PI * 0.8); // Góc từ 180 xuống
+                        x = 5 * Math.cos(a); y = 4 + 4 * Math.sin(a);
+                    } else if (section < 0.75) { // Nét chéo
+                        x = 5 * (1-t) - 4*t; y = 4 * (1-t) - 7*t; // Nội suy từ góc trên xuống góc dưới
+                    } else { // Nét ngang đáy
+                        x = -4 + t * 8; y = -7;
+                    }
+                    z = (Math.random()-0.5)*2;
+                }
+                else if(shape === 'num3') { // Số 3: 2 nét cong nối nhau
+                    const a = Math.PI/2 - (t * Math.PI); // Góc bán nguyệt bên phải
+                    if(section < 0.5) { x = 5 * Math.cos(a); y = 4 + 4 * Math.sin(a); } // Cong trên
+                    else { x = 5 * Math.cos(a); y = -4 + 4 * Math.sin(a); } // Cong dưới
+                    z = (Math.random()-0.5)*2;
+                }
+                else if(shape === 'num4') { // Số 4: 3 nét thẳng
+                     if(section < 0.3) { x = -4; y = 0 + t * 8; } // Dọc trái ngắn
+                     else if (section < 0.6) { x = -4 + t * 8; y = 0; } // Ngang giữa
+                     else { x = 4; y = (t-0.5)*16; } // Dọc phải dài
+                     z = (Math.random()-0.5)*2;
+                }
+                else if(shape === 'num5') { // Số 5: Ngang trên, dọc xuống, cong dưới
+                    if(section < 0.3) { x = 4 - t * 8; y = 7; } // Ngang trên
+                    else if (section < 0.5) { x = -4; y = 7 - t*7; } // Dọc xuống
+                    else { // Cong dưới
+                        const a = Math.PI - (t * Math.PI * 1.2);
+                         x = -4 + 5 * Math.cos(a) + 4; y = 0 + 5 * Math.sin(a);
+                    }
+                    z = (Math.random()-0.5)*2;
+                }
+
+                targetPos[idx]=x * scale * 1.5; // Scale to lên chút cho dễ nhìn
+                targetPos[idx+1]=y * scale * 1.5; 
+                targetPos[idx+2]=z;
+            }
+        }
+        // Tính toán hình ban đầu
+        calcTargets(currentShape);
+
+        // --- HÀM ĐẾM NGÓN TAY (AI Cử chỉ) ---
+        function isFingerUp(landmarks, tipIdx, jointIdx) {
+             const wrist = landmarks[0];
+             const tip = landmarks[tipIdx];
+             const joint = landmarks[jointIdx];
+             // So sánh khoảng cách bình phương từ cổ tay
+             const distTip = (tip.x-wrist.x)**2 + (tip.y-wrist.y)**2;
+             const distJoint = (joint.x-wrist.x)**2 + (joint.y-wrist.y)**2;
+             // Nếu đầu ngón xa cổ tay hơn khớp giữa -> Ngón đang duỗi
+             // Hệ số 1.1 để tạo ngưỡng an toàn, tránh nhận diện sai khi ngón hơi cong
+             return distTip > distJoint * 1.15;
+        }
+
+        function countExtendedFingers(lm) {
+             let count = 0;
+             // Thumb (ngón cái): so khớp 4 vs khớp 2 (gần gốc ngón cái)
+             if(isFingerUp(lm, 4, 2)) count++;
+             // Index (trỏ): 8 vs 6
+             if(isFingerUp(lm, 8, 6)) count++;
+             // Middle (giữa): 12 vs 10
+             if(isFingerUp(lm, 12, 10)) count++;
+             // Ring (áp út): 16 vs 14
+             if(isFingerUp(lm, 16, 14)) count++;
+             // Pinky (út): 20 vs 18
+             if(isFingerUp(lm, 20, 18)) count++;
+             return count;
+        }
+
+        // --- XỬ LÝ MEDIAPIPE ---
+        function onResults(results) {
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('ui-panel').style.display = 'block';
+            document.getElementById('guide-text').style.display = 'block';
+
+            let handStatusText = "Không thấy tay";
+            let gestureText = "--";
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // Lấy bàn tay đầu tiên phát hiện được
+                const landmarks = results.multiHandLandmarks[0];
+                handStatusText = "Đã phát hiện 1 tay";
+
+                // Đếm số ngón tay đang giơ
+                const fingerCount = countExtendedFingers(landmarks);
+                gestureText = `Số: ${fingerCount}`;
+
+                // Nếu số ngón tay thay đổi so với lần trước, cập nhật hình dáng hạt
+                if (fingerCount !== lastDetectedNumber && fingerCount <= 5) {
+                    currentShape = `num${fingerCount}`;
+                    calcTargets(currentShape); // Tính toán vị trí mới cho các hạt
+                    lastDetectedNumber = fingerCount;
+                    
+                    // Hiệu ứng màu sắc nhẹ khi đổi số
+                    material.color.setHSL(fingerCount / 5, 1.0, 0.5); 
+                }
+            } else {
+                // Nếu không thấy tay, quay về hình trái tim mặc định sau một lúc
+                if (lastDetectedNumber !== -1) {
+                     currentShape = 'heart';
+                     calcTargets('heart');
+                     lastDetectedNumber = -1;
+                     material.color.setHex(0x00ffff); // Reset màu
+                }
+            }
+
+            // Cập nhật UI
+            document.getElementById('hand-count-status').innerText = handStatusText;
+            document.getElementById('gesture-result').innerText = gestureText;
+        }
+
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        hands.onResults(onResults);
+
+        // --- KHỞI ĐỘNG CAMERA ---
+        async function startSystem() {
+            const btn = document.getElementById('btn-start');
+            btn.innerText = "ĐANG KẾT NỐI..."; btn.classList.remove('animate-bounce');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
+                document.getElementById('camera_display').srcObject = stream;
+                const videoInput = document.getElementById('input_video');
+                videoInput.srcObject = stream;
+                const cam = new Camera(videoInput, {
+                    onFrame: async () => { await hands.send({image: videoInput}); },
+                    width: 640, height: 480
+                });
+                cam.start();
+            } catch (err) {
+                btn.innerText = "LỖI CAMERA";
+                document.getElementById('error-log').innerText = "Không thể truy cập camera. Hãy kiểm tra quyền hoặc dùng HTTPS.";
+                document.getElementById('error-log').classList.remove('hidden');
+            }
+        }
+
+        // --- LOOP ANIMATION ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const posAttr = geometry.attributes.position;
+            const arr = posAttr.array;
+            
+            particles.rotation.y += 0.002; // Xoay nhẹ cho sinh động
+
+            for(let i=0; i<PARTICLE_COUNT; i++) {
+                const idx=i*3;
+                // Di chuyển hạt về vị trí đích (Lerp)
+                // Tốc độ di chuyển (0.08) càng cao thì hạt bay về càng nhanh
+                arr[idx] += (targetPos[idx] - arr[idx]) * 0.08;
+                arr[idx+1] += (targetPos[idx+1] - arr[idx+1]) * 0.08;
+                arr[idx+2] += (targetPos[idx+2] - arr[idx+2]) * 0.08;
+            }
+            posAttr.needsUpdate = true;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
         </div>
     </div>
 
